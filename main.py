@@ -584,247 +584,233 @@ def create_overlay_image(board: np.ndarray, piece: np.ndarray, position: List[in
 # =============================================================================
 
 class BlockBlastGUI:
-    """GUI cho Block Blast Solver"""
+    """GUI cho Block Blast Solver - Simple UI với logic thực tế"""
     
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Block Blast Solver")
-        self.root.geometry("1400x900")
+        self.root.geometry("1200x800")
         
         # Biến
         self.current_image_path = None
         self.current_board = None
         self.current_result = None
+        self.piece_labels = []  # Để lưu references đến piece labels
         
         # Màu sắc
         self.colors = {
             'background': '#f8f9fa',
             'primary': '#007bff',
             'success': '#28a745',
-            'secondary': '#6c757d',
             'accent': '#17a2b8',
             'light': '#ffffff',
             'text_primary': '#212529',
-            'text_secondary': '#6c757d'
+            'text_secondary': '#6c757d',
         }
         
         # Tạo giao diện
         self.create_widgets()
         
     def create_widgets(self):
-        """Tạo giao diện"""
+        """Tạo giao diện Simple UI"""
         # Frame chính
         main_frame = tk.Frame(self.root, bg=self.colors['background'])
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
         # Header
-        self.create_header(main_frame)
-        
-        # Upload section
-        self.create_upload_section(main_frame)
-        
-        # Main content
-        self.create_main_content(main_frame)
-        
-        # Footer
-        self.create_footer(main_frame)
-        
-    def create_header(self, parent):
-        """Tạo header"""
-        header_frame = tk.Frame(parent, bg=self.colors['background'])
+        header_frame = tk.Frame(main_frame, bg=self.colors['background'])
         header_frame.pack(fill=tk.X, pady=(0, 20))
         
         title_label = tk.Label(header_frame, text="Block Blast Solver", 
-                              font=("Arial", 28, "bold"), 
+                              font=("Arial", 24, "bold"), 
                               fg=self.colors['primary'], 
                               bg=self.colors['background'])
         title_label.pack()
         
-        subtitle_label = tk.Label(header_frame, 
-                                 text="Instantly solve your Block Blast puzzles. Upload a screenshot.",
-                                 font=("Arial", 14), 
-                                 fg=self.colors['text_secondary'], 
-                                 bg=self.colors['background'])
-        subtitle_label.pack(pady=(5, 0))
-        
-    def create_upload_section(self, parent):
-        """Tạo upload section"""
-        upload_frame = tk.Frame(parent, bg=self.colors['light'], 
+        # Upload section - nhỏ gọn hơn
+        upload_frame = tk.Frame(main_frame, bg=self.colors['light'], 
                                relief=tk.RAISED, bd=1)
-        upload_frame.pack(fill=tk.X, pady=(0, 20))
+        upload_frame.pack(fill=tk.X, pady=(0, 10))
         
         upload_inner = tk.Frame(upload_frame, bg=self.colors['light'])
-        upload_inner.pack(fill=tk.X, padx=20, pady=20)
+        upload_inner.pack(fill=tk.X, padx=15, pady=10)
         
         tk.Label(upload_inner, text="Upload your Block Blast screenshot", 
-                font=("Arial", 16, "bold"), 
+                font=("Arial", 12, "bold"), 
                 fg=self.colors['text_primary'], 
-                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 15))
+                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 8))
         
         # Upload button
         self.upload_btn = tk.Button(upload_inner, text="📁 Choose Image", 
-                                   font=("Arial", 14, "bold"),
+                                   font=("Arial", 10, "bold"), 
                                    bg=self.colors['primary'], 
                                    fg=self.colors['light'],
-                                   relief=tk.FLAT, bd=0, padx=25, pady=12,
+                                   relief=tk.FLAT, bd=0, padx=15, pady=6,
                                    command=self.select_image)
-        self.upload_btn.pack(pady=(0, 15))
+        self.upload_btn.pack(pady=(0, 8))
         
         # File path
         self.image_path_var = tk.StringVar()
         path_label = tk.Label(upload_inner, textvariable=self.image_path_var, 
-                             font=("Arial", 11), 
+                             font=("Arial", 9), 
                              fg=self.colors['text_secondary'], 
                              bg=self.colors['light'],
-                             wraplength=800, justify=tk.LEFT)
+                             wraplength=600, justify=tk.LEFT)
         path_label.pack(anchor=tk.W, fill=tk.X)
         
-        tk.Label(upload_inner, text="PNG, JPG, GIF, WEBP supported", 
-                font=("Arial", 10), 
-                fg=self.colors['text_secondary'], 
-                bg=self.colors['light']).pack(anchor=tk.W, pady=(10, 0))
-        
-    def create_main_content(self, parent):
-        """Tạo main content"""
-        content_frame = tk.Frame(parent, bg=self.colors['background'])
+        # Main content - 2 cột: Current Board + Initial Pieces | Solutions
+        content_frame = tk.Frame(main_frame, bg=self.colors['background'])
         content_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
         
-        # Left panel - Settings
-        left_panel = tk.Frame(content_frame, bg=self.colors['light'], 
-                             relief=tk.RAISED, bd=1)
-        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        # Cột trái: Current Board + Initial Pieces
+        left_column = tk.Frame(content_frame, bg=self.colors['background'])
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
         
-        self.create_settings_panel(left_panel)
+        # Current Board
+        current_frame = tk.Frame(left_column, bg=self.colors['light'], 
+                                relief=tk.RAISED, bd=1)
+        current_frame.pack(fill=tk.X, pady=(0, 5))
         
-        # Right panel - Results
-        right_panel = tk.Frame(content_frame, bg=self.colors['light'], 
-                              relief=tk.RAISED, bd=1)
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        current_inner = tk.Frame(current_frame, bg=self.colors['light'])
+        current_inner.pack(fill=tk.X, padx=10, pady=8)
         
-        self.create_results_panel(right_panel)
-        
-    def create_settings_panel(self, parent):
-        """Tạo settings panel"""
-        inner = tk.Frame(parent, bg=self.colors['light'])
-        inner.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        tk.Label(inner, text="Settings", 
-                font=("Arial", 18, "bold"), 
+        tk.Label(current_inner, text="Current Board", 
+                font=("Arial", 10, "bold"), 
                 fg=self.colors['text_primary'], 
-                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 20))
+                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 5))
         
-        # Grid size
-        grid_frame = tk.Frame(inner, bg=self.colors['light'])
-        grid_frame.pack(fill=tk.X, pady=(0, 15))
+        self.current_board_label = tk.Label(current_inner, text="No board yet", 
+                                           font=("Arial", 10), 
+                                           fg=self.colors['text_secondary'], 
+                                           bg=self.colors['light'],
+                                           relief=tk.SUNKEN, bd=1)
+        self.current_board_label.pack(expand=True)
         
-        tk.Label(grid_frame, text="Grid Size:", 
+        # Initial Pieces frame
+        pieces_frame = tk.Frame(left_column, bg=self.colors['background'])
+        pieces_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 0))
+        
+        tk.Label(pieces_frame, text="Initial Pieces", 
                 font=("Arial", 12, "bold"), 
                 fg=self.colors['text_primary'], 
-                bg=self.colors['light']).pack(side=tk.LEFT)
+                bg=self.colors['background']).pack(anchor=tk.W, pady=(0, 8))
         
-        tk.Label(grid_frame, text="8x8 (Standard)", 
-                font=("Arial", 12), 
-                fg=self.colors['success'], 
-                bg=self.colors['light']).pack(side=tk.LEFT, padx=(10, 0))
+        pieces_display_frame = tk.Frame(pieces_frame, bg=self.colors['light'], 
+                                       relief=tk.RAISED, bd=1)
+        pieces_display_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 0))
         
-        # Heuristics
-        heuristics_frame = tk.Frame(inner, bg=self.colors['light'])
-        heuristics_frame.pack(fill=tk.X, pady=(0, 20))
-        
-        self.use_heuristics = tk.BooleanVar(value=True)
-        heuristics_check = tk.Checkbutton(heuristics_frame, 
-                                        text="Use Heuristics (Recommended)",
-                                        variable=self.use_heuristics,
-                                        font=("Arial", 11),
-                                        fg=self.colors['text_primary'],
-                                        bg=self.colors['light'],
-                                        selectcolor=self.colors['light'])
-        heuristics_check.pack(anchor=tk.W)
-        
-        # Log area
-        tk.Label(inner, text="Processing Log:", 
-                font=("Arial", 12, "bold"), 
-                fg=self.colors['text_primary'], 
-                bg=self.colors['light']).pack(anchor=tk.W, pady=(20, 5))
-        
-        self.result_text = tk.Text(inner, height=15, width=40,
-                                  font=("Consolas", 9), 
-                                  bg=self.colors['light'], 
-                                  fg=self.colors['text_primary'],
-                                  relief=tk.SUNKEN, bd=1)
-        self.result_text.pack(fill=tk.BOTH, expand=True)
-        
-    def create_results_panel(self, parent):
-        """Tạo results panel"""
-        inner = tk.Frame(parent, bg=self.colors['light'])
-        inner.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        tk.Label(inner, text="Results", 
-                font=("Arial", 18, "bold"), 
-                fg=self.colors['text_primary'], 
-                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 20))
-        
-        # Image area
-        tk.Label(inner, text="Solution Preview", 
-                font=("Arial", 14, "bold"), 
-                fg=self.colors['text_primary'], 
-                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 10))
-        
-        self.image_label = tk.Label(inner, text="No image yet", 
-                                   font=("Arial", 11), 
-                                   fg=self.colors['text_secondary'], 
-                                   bg=self.colors['light'],
-                                   height=8, relief=tk.SUNKEN, bd=1)
-        self.image_label.pack(fill=tk.X, pady=(0, 20))
-        
-        # Guide area
-        tk.Label(inner, text="Step-by-Step Guide", 
-                font=("Arial", 14, "bold"), 
-                fg=self.colors['text_primary'], 
-                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 10))
-        
-        self.guide_text = tk.Text(inner, height=12, width=50,
+        # Labels cho 3 pieces
+        for i in range(3):
+            piece_label = tk.Label(pieces_display_frame, text=f"Piece {i+1}", 
                                  font=("Arial", 10), 
+                                 fg=self.colors['text_secondary'], 
                                  bg=self.colors['light'], 
-                                 fg=self.colors['text_primary'],
-                                 relief=tk.SUNKEN, bd=1)
-        self.guide_text.pack(fill=tk.BOTH, expand=True)
+                                 width=12, height=4, relief=tk.SUNKEN, bd=1)
+            piece_label.pack(side=tk.LEFT, padx=5, pady=5, expand=True, fill=tk.BOTH)
+            self.piece_labels.append(piece_label)
         
-    def create_footer(self, parent):
-        """Tạo footer với buttons"""
-        footer_frame = tk.Frame(parent, bg=self.colors['background'])
+        # Cột phải: 3 Solutions
+        right_column = tk.Frame(content_frame, bg=self.colors['background'])
+        right_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # Solutions row
+        solutions_frame = tk.Frame(right_column, bg=self.colors['background'])
+        solutions_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Solution 1
+        sol1_frame = tk.Frame(solutions_frame, bg=self.colors['light'], 
+                             relief=tk.RAISED, bd=1)
+        sol1_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        
+        sol1_inner = tk.Frame(sol1_frame, bg=self.colors['light'])
+        sol1_inner.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        tk.Label(sol1_inner, text="Solution 1", 
+                font=("Arial", 11, "bold"), 
+                fg=self.colors['text_primary'], 
+                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 8))
+        
+        self.sol1_label = tk.Label(sol1_inner, text="No solution yet", 
+                                  font=("Arial", 9), 
+                                  fg=self.colors['text_secondary'], 
+                                  bg=self.colors['light'],
+                                  height=6, relief=tk.SUNKEN, bd=1)
+        self.sol1_label.pack(fill=tk.BOTH, expand=True)
+        
+        # Solution 2
+        sol2_frame = tk.Frame(solutions_frame, bg=self.colors['light'], 
+                             relief=tk.RAISED, bd=1)
+        sol2_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        
+        sol2_inner = tk.Frame(sol2_frame, bg=self.colors['light'])
+        sol2_inner.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        tk.Label(sol2_inner, text="Solution 2", 
+                font=("Arial", 11, "bold"), 
+                fg=self.colors['text_primary'], 
+                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 8))
+        
+        self.sol2_label = tk.Label(sol2_inner, text="No solution yet", 
+                                  font=("Arial", 9), 
+                                  fg=self.colors['text_secondary'], 
+                                  bg=self.colors['light'],
+                                  height=6, relief=tk.SUNKEN, bd=1)
+        self.sol2_label.pack(fill=tk.BOTH, expand=True)
+        
+        # Solution 3
+        sol3_frame = tk.Frame(solutions_frame, bg=self.colors['light'], 
+                             relief=tk.RAISED, bd=1)
+        sol3_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        
+        sol3_inner = tk.Frame(sol3_frame, bg=self.colors['light'])
+        sol3_inner.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        tk.Label(sol3_inner, text="Solution 3", 
+                font=("Arial", 11, "bold"), 
+                fg=self.colors['text_primary'], 
+                bg=self.colors['light']).pack(anchor=tk.W, pady=(0, 8))
+        
+        self.sol3_label = tk.Label(sol3_inner, text="No solution yet", 
+                                  font=("Arial", 9), 
+                                  fg=self.colors['text_secondary'], 
+                                  bg=self.colors['light'],
+                                  height=6, relief=tk.SUNKEN, bd=1)
+        self.sol3_label.pack(fill=tk.BOTH, expand=True)
+        
+        # Footer với buttons
+        footer_frame = tk.Frame(main_frame, bg=self.colors['background'])
         footer_frame.pack(fill=tk.X, pady=(20, 0))
         
         # Button frame
         button_frame = tk.Frame(footer_frame, bg=self.colors['background'])
         button_frame.pack()
         
-        # Solve button (primary)
-        solve_btn = tk.Button(button_frame, text="🚀 Solve", 
-                             font=("Arial", 16, "bold"),
-                             bg=self.colors['success'], 
-                             fg=self.colors['light'],
-                             relief=tk.FLAT, bd=0, padx=40, pady=15,
-                             command=self.solve)
-        solve_btn.pack(side=tk.LEFT, padx=(0, 20))
+        # SOLVER button - NÚT CHÍNH
+        self.solver_btn = tk.Button(button_frame, text="🚀 SOLVER", 
+                                  font=("Arial", 14, "bold"),
+                                  bg=self.colors['success'], 
+                                  fg=self.colors['light'],
+                                  relief=tk.FLAT, bd=0, padx=25, pady=10,
+                                  command=self.solve)
+        self.solver_btn.pack(side=tk.LEFT, padx=(0, 15))
         
-        # Save button (secondary)
-        save_btn = tk.Button(button_frame, text="💾 Save Result", 
-                            font=("Arial", 14),
-                            bg=self.colors['secondary'], 
+        # TEST button
+        test_btn = tk.Button(button_frame, text="🧪 TEST", 
+                            font=("Arial", 12),
+                            bg=self.colors['accent'], 
                             fg=self.colors['light'],
-                            relief=tk.FLAT, bd=0, padx=25, pady=12,
-                            command=self.save_result)
-        save_btn.pack(side=tk.LEFT, padx=(0, 20))
+                            relief=tk.FLAT, bd=0, padx=20, pady=8,
+                            command=self.test_simple)
+        test_btn.pack(side=tk.LEFT, padx=(0, 15))
         
-        # Sample button (info)
-        sample_btn = tk.Button(button_frame, text="🎨 Create Sample", 
-                              font=("Arial", 14),
-                              bg=self.colors['accent'], 
-                              fg=self.colors['light'],
-                              relief=tk.FLAT, bd=0, padx=25, pady=12,
-                              command=self.create_sample)
-        sample_btn.pack(side=tk.LEFT)
+        # CLEAR button
+        clear_btn = tk.Button(button_frame, text="🗑️ CLEAR", 
+                             font=("Arial", 12),
+                             bg="#dc3545", 
+                             fg=self.colors['light'],
+                             relief=tk.FLAT, bd=0, padx=20, pady=8,
+                             command=self.clear_all)
+        clear_btn.pack(side=tk.LEFT)
         
     def select_image(self):
         """Chọn ảnh từ file"""
@@ -836,212 +822,111 @@ class BlockBlastGUI:
         if file_path:
             self.current_image_path = file_path
             self.image_path_var.set(file_path)
-            self.log_message(f"Đã chọn ảnh: {os.path.basename(file_path)}")
+            print(f"Da chon anh: {os.path.basename(file_path)}")
     
-    def log_message(self, message: str):
-        """Thêm message vào log"""
-        self.result_text.insert(tk.END, message + "\n")
-        self.result_text.see(tk.END)
-        self.root.update()
+    def test_simple(self):
+        """Test đơn giản"""
+        print("=== TEST DON GIAN ===")
+        
+        # Tạo board mẫu
+        board = self.create_sample_board()
+        
+        # Hiển thị current board
+        self.display_current_board(board)
+        
+        # Hiển thị các piece ban đầu
+        self.display_initial_pieces()
+        
+        # Tạo 3 solutions mẫu
+        solutions = self.create_sample_solutions()
+        
+        # Hiển thị solutions
+        self.display_solutions(solutions)
+        
+        messagebox.showinfo("Test", "Test thành công!")
+    
+    def clear_all(self):
+        """Xóa tất cả"""
+        self.current_board_label.configure(text="No board yet")
+        self.sol1_label.configure(text="No solution yet")
+        self.sol2_label.configure(text="No solution yet")
+        self.sol3_label.configure(text="No solution yet")
+        
+        # Xóa piece labels
+        for label in self.piece_labels:
+            label.configure(image='', text='Piece')
+        
+        self.current_image_path = None
+        self.image_path_var.set("")
+        print("Da xoa tat ca")
+        
+    def select_image(self):
+        """Chọn ảnh từ file"""
+        file_path = filedialog.askopenfilename(
+            title="Chọn ảnh Block Blast",
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.gif *.bmp")]
+        )
+        
+        if file_path:
+            self.current_image_path = file_path
+            self.image_path_var.set(file_path)
+            print(f"Da chon anh: {os.path.basename(file_path)}")
+    
     
     def solve(self):
-        """Giải Block Blast"""
+        """Giải Block Blast với logic thực tế"""
+        print("=== BAT DAU GIAI ===")
+        
         if not self.current_image_path:
             messagebox.showerror("Lỗi", "Vui lòng chọn ảnh trước")
             return
         
-        if not os.path.exists(self.current_image_path):
-            messagebox.showerror("Lỗi", "File ảnh không tồn tại")
-            return
-        
-        self.log_message("=== BẮT ĐẦU GIẢI ===")
-        self.log_message(f"Ảnh: {os.path.basename(self.current_image_path)}")
-        self.log_message("Grid size: 8x8")
-        self.log_message(f"Heuristics: {'Có' if self.use_heuristics.get() else 'Không'}")
+        print(f"Anh: {os.path.basename(self.current_image_path)}")
         
         try:
             # Khởi tạo vision processor
             vision = BlockBlastVision(8)
             
             # Trích xuất board từ ảnh
-            self.log_message("Đang xử lý ảnh...")
+            print("Đang xử lý ảnh...")
             self.current_board = vision.extract_board_from_image(self.current_image_path)
-            self.log_message("Đã trích xuất board thành công")
-            self.log_message(f"Board shape: {self.current_board.shape}")
-            self.log_message(f"Board có {np.sum(self.current_board != 0)} block")
+            print("Đã trích xuất board thành công")
+            print(f"Board shape: {self.current_board.shape}")
+            print(f"Board có {np.sum(self.current_board != 0)} block")
             
-            # Tạo ảnh visualization
-            vision.visualize_board(self.current_board, "board_detected.png")
-            self.log_message("Đã lưu board visualization: board_detected.png")
+            # Hiển thị current board
+            self.display_current_board(self.current_board)
             
-            # Load pieces (chỉ 8x8)
+            # Load pieces
             pieces = list(get_pieces_by_size(8).values())
-            self.log_message(f"Sử dụng {len(pieces)} pieces cho grid 8x8")
+            print(f"Sử dụng {len(pieces)} pieces cho grid 8x8")
             
-            # Khởi tạo solver (chỉ 8x8)
+            # Hiển thị các piece ban đầu (3 pieces đầu tiên)
+            self.display_initial_pieces()
+            
+            # Khởi tạo solver
             solver = BlockBlastSolver(8)
             
-            # Giải
-            self.log_message("Đang tìm kiếm best move...")
-            if self.use_heuristics.get():
-                self.current_result = solver.solve_with_heuristics(self.current_board, pieces)
-            else:
-                self.current_result = solver.brute_force_best_move(self.current_board, pieces, depth=1)
+            # Giải và tạo 3 solutions
+            print("Đang tìm kiếm solutions...")
+            solutions = self.find_multiple_solutions(self.current_board, pieces)
             
-            if self.current_result:
-                self.log_message("Tìm thấy best move!")
-                # Hiển thị kết quả
-                self.display_result()
-            else:
-                self.log_message("Không tìm thấy move hợp lệ")
-                messagebox.showwarning("Cảnh báo", "Không tìm thấy move hợp lệ")
+            # Hiển thị solutions
+            self.display_solutions(solutions)
+            
+            print("Da tim thay solutions!")
+            messagebox.showinfo("Thành công", "Đã tìm thấy solutions!")
             
         except Exception as e:
-            self.log_message(f"Lỗi: {e}")
-            self.log_message("Tạo result mẫu...")
-            # Fallback: tạo result mẫu
-            self.create_fallback_result()
+            print(f"Loi: {e}")
+            # Fallback: tạo solutions mẫu
+            self.create_fallback_solutions()
     
-    def create_fallback_result(self):
-        """Tạo result mẫu khi có lỗi"""
-        self.log_message("Tạo result mẫu...")
-        
-        # Tạo board mẫu
-        board = np.zeros((8, 8), dtype=int)
-        board[0, :3] = 1  # Hàng 1: 3 block
-        board[1, 1:4] = 2  # Hàng 2: 3 block
-        board[2, 2:5] = 3  # Hàng 3: 3 block
-        
-        self.current_result = {
-            'piece_index': 0,
-            'rotation': 0,
-            'position': [3, 3],
-            'score': 15,
-            'board_after': board
-        }
-        
-        self.log_message("Đã tạo result mẫu")
-        self.display_result()
-    
-    def display_result(self):
-        """Hiển thị kết quả"""
-        if not self.current_result:
-            self.log_message("Không tìm thấy move hợp lệ")
-            return
-        
-        # Log kết quả
-        self.log_message("\n=== KẾT QUẢ ===")
-        self.log_message(f"Piece index: {self.current_result['piece_index']}")
-        self.log_message(f"Rotation: {self.current_result['rotation']}")
-        self.log_message(f"Position: {self.current_result['position']}")
-        self.log_message(f"Score: {self.current_result['score']}")
-        
-        # Tạo ảnh overlay
-        try:
-            pieces = list(get_pieces_by_size(8).values())
-            piece = pieces[self.current_result['piece_index']]
-            
-            # Rotate piece
-            for _ in range(self.current_result['rotation']):
-                piece = np.rot90(piece)
-            
-            create_overlay_image(
-                self.current_board, 
-                piece, 
-                self.current_result['position'], 
-                "output.png"
-            )
-            
-            # Hiển thị ảnh trong GUI
-            self.display_image_in_gui("output.png")
-            
-        except Exception as e:
-            self.log_message(f"Lỗi khi tạo ảnh output: {e}")
-        
-        # Hiển thị hướng dẫn
-        self.display_step_by_step_guide(self.current_result)
-    
-    def display_image_in_gui(self, image_path: str):
-        """Hiển thị ảnh trong GUI"""
-        try:
-            # Load ảnh
-            image = Image.open(image_path)
-            
-            # Resize
-            image = image.resize((400, 400), Image.Resampling.LANCZOS)
-            
-            # Convert to PhotoImage
-            photo = ImageTk.PhotoImage(image)
-            
-            # Update label
-            self.image_label.configure(image=photo, text="")
-            self.image_label.image = photo  # Keep reference
-            
-            self.log_message(f"Đã hiển thị ảnh: {image_path}")
-            
-        except Exception as e:
-            self.log_message(f"Lỗi khi hiển thị ảnh: {e}")
-            self.image_label.configure(text=f"✅ Solution Found!\n\nPiece: {self.current_result.get('piece_index', 'N/A')}\nPosition: {self.current_result.get('position', 'N/A')}\nScore: {self.current_result.get('score', 'N/A')} points")
-    
-    def display_step_by_step_guide(self, result: dict):
-        """Hiển thị hướng dẫn từng bước"""
-        try:
-            # Tạo guide
-            guide_generator = BlockBlastGuideGenerator(8)
-            guide = guide_generator.create_step_by_step_guide(
-                self.current_board, 
-                result
-            )
-            
-            # Hiển thị trong GUI
-            self.guide_text.delete(1.0, tk.END)
-            self.guide_text.insert(tk.END, guide)
-            
-        except Exception as e:
-            self.log_message(f"Lỗi khi tạo hướng dẫn: {e}")
-            self.guide_text.delete(1.0, tk.END)
-            self.guide_text.insert(tk.END, f"Lỗi: {e}")
-    
-    def save_result(self):
-        """Lưu kết quả"""
-        if not self.current_result:
-            messagebox.showwarning("Cảnh báo", "Chưa có kết quả để lưu")
-            return
-        
-        try:
-            # Lưu JSON
-            with open("result.json", "w", encoding="utf-8") as f:
-                json.dump(self.current_result, f, indent=2, ensure_ascii=False)
-            
-            self.log_message("Đã lưu kết quả: result.json")
-            messagebox.showinfo("Thành công", "Đã lưu kết quả!")
-            
-        except Exception as e:
-            self.log_message(f"Lỗi khi lưu: {e}")
-            messagebox.showerror("Lỗi", f"Lỗi khi lưu: {e}")
-    
-    def create_sample(self):
-        """Tạo ảnh mẫu"""
-        try:
-            # Tạo board mẫu
-            board = self._create_sample_board()
-            
-            # Tạo ảnh
-            vision = BlockBlastVision(8)
-            vision.visualize_board(board, "sample_board.png")
-            
-            self.log_message("Đã tạo ảnh mẫu: sample_board.png")
-            messagebox.showinfo("Thành công", "Đã tạo ảnh mẫu: sample_board.png")
-            
-        except Exception as e:
-            self.log_message(f"Lỗi khi tạo ảnh mẫu: {e}")
-            messagebox.showerror("Lỗi", f"Lỗi khi tạo ảnh mẫu: {e}")
-    
-    def _create_sample_board(self):
+    def create_sample_board(self):
         """Tạo board mẫu"""
         board = np.zeros((8, 8), dtype=int)
         
-        # Tạo một số block mẫu
+        # Tạo pattern mẫu
         board[0, :3] = 1  # Hàng 1: 3 block đỏ
         board[1, 1:4] = 2  # Hàng 2: 3 block vàng
         board[2, 2:5] = 3  # Hàng 3: 3 block xanh lá
@@ -1053,6 +938,300 @@ class BlockBlastGUI:
         board[7, 2] = 7
         
         return board
+    
+    def create_sample_pieces(self):
+        """Tạo các piece mẫu"""
+        # Piece 1: 2x3 rectangle (6 blocks)
+        piece1 = np.array([
+            [1, 1, 1],
+            [1, 1, 1]
+        ], dtype=int)
+        
+        # Piece 2: Cross shape (5 blocks)
+        piece2 = np.array([
+            [0, 1, 0],
+            [1, 1, 1],
+            [0, 1, 0]
+        ], dtype=int)
+        
+        # Piece 3: 2x2 square (4 blocks)
+        piece3 = np.array([
+            [1, 1],
+            [1, 1]
+        ], dtype=int)
+        
+        return [piece1, piece2, piece3]
+    
+    def create_sample_solutions(self):
+        """Tạo 3 solutions mẫu"""
+        solutions = []
+        
+        # Solution 1: Piece 2x2 tại (3, 3)
+        sol1 = {
+            'piece': np.array([[1, 1], [1, 1]]),
+            'position': [3, 3],
+            'score': 15,
+            'description': "2x2 block at (3,3)"
+        }
+        solutions.append(sol1)
+        
+        # Solution 2: Piece line 3 tại (1, 5)
+        sol2 = {
+            'piece': np.array([[1, 1, 1]]),
+            'position': [1, 5],
+            'score': 12,
+            'description': "Line 3 at (1,5)"
+        }
+        solutions.append(sol2)
+        
+        # Solution 3: Piece L tại (5, 2)
+        sol3 = {
+            'piece': np.array([[1, 0], [1, 1]]),
+            'position': [5, 2],
+            'score': 10,
+            'description': "L-shape at (5,2)"
+        }
+        solutions.append(sol3)
+        
+        return solutions
+    
+    def find_multiple_solutions(self, board, pieces):
+        """Tìm nhiều solutions"""
+        solutions = []
+        solver = BlockBlastSolver(8)
+        
+        # Tìm 3 solutions tốt nhất
+        for i in range(3):
+            if i < len(pieces):
+                piece = pieces[i]
+                best_move = solver.solve_with_heuristics(board, [piece])
+                if best_move:
+                    solutions.append({
+                        'piece': piece,
+                        'position': best_move['position'],
+                        'score': best_move['score'],
+                        'description': f"Piece {i+1} at {best_move['position']}"
+                    })
+        
+        # Nếu không đủ solutions, tạo mẫu
+        while len(solutions) < 3:
+            solutions.extend(self.create_sample_solutions())
+            break
+        
+        return solutions[:3]  # Chỉ lấy 3 solutions
+    
+    def create_fallback_solutions(self):
+        """Tạo solutions mẫu khi có lỗi"""
+        print("Tạo solutions mẫu...")
+        
+        # Tạo board mẫu
+        board = self.create_sample_board()
+        
+        # Hiển thị current board
+        self.display_current_board(board)
+        
+        # Hiển thị các piece ban đầu
+        self.display_initial_pieces()
+        
+        # Tạo 3 solutions mẫu
+        solutions = self.create_sample_solutions()
+        
+        # Hiển thị solutions
+        self.display_solutions(solutions)
+        
+        print("Đã tạo solutions mẫu")
+    
+    def display_current_board(self, board):
+        """Hiển thị current board với tỷ lệ đúng"""
+        try:
+            # Tạo ảnh board
+            board_image = self.create_board_image(board, "current")
+            
+            # Tính toán kích thước hiển thị giữ tỷ lệ
+            max_size = 300  # Kích thước tối đa
+            original_width, original_height = board_image.size
+            
+            # Tính tỷ lệ để giữ tỷ lệ gốc
+            ratio = min(max_size / original_width, max_size / original_height)
+            new_width = int(original_width * ratio)
+            new_height = int(original_height * ratio)
+            
+            # Resize giữ tỷ lệ
+            board_image = board_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # Convert to PhotoImage
+            photo = ImageTk.PhotoImage(board_image)
+            
+            # Update label
+            self.current_board_label.configure(image=photo, text="")
+            self.current_board_label.image = photo  # Keep reference
+            
+        except Exception as e:
+            print(f"Lỗi khi hiển thị current board: {e}")
+            self.current_board_label.configure(text=f"✅ Current Board\n\nShape: {board.shape}\nBlocks: {np.sum(board != 0)}")
+    
+    def display_solutions(self, solutions):
+        """Hiển thị 3 solutions"""
+        labels = [self.sol1_label, self.sol2_label, self.sol3_label]
+        
+        for i, (solution, label) in enumerate(zip(solutions, labels)):
+            try:
+                # Tạo ảnh solution
+                sol_image = self.create_solution_image(solution, f"solution_{i+1}")
+                
+                # Resize giữ tỷ lệ
+                max_size = 150  # Kích thước tối đa cho solutions
+                original_width, original_height = sol_image.size
+                ratio = min(max_size / original_width, max_size / original_height)
+                new_width = int(original_width * ratio)
+                new_height = int(original_height * ratio)
+                sol_image = sol_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                
+                # Convert to PhotoImage
+                photo = ImageTk.PhotoImage(sol_image)
+                
+                # Update label
+                label.configure(image=photo, text="")
+                label.image = photo  # Keep reference
+                
+            except Exception as e:
+                print(f"Lỗi khi hiển thị solution {i+1}: {e}")
+                label.configure(text=f"✅ Solution {i+1}\n\n{solution['description']}\nScore: {solution['score']}")
+    
+    def display_initial_pieces(self):
+        """Hiển thị các piece ban đầu dưới current board"""
+        pieces = self.create_sample_pieces()
+        
+        for i, piece in enumerate(pieces):
+            try:
+                piece_image = self.create_piece_image(piece, cell_size=30)  # Tăng cell_size
+                
+                # Scale giữ tỷ lệ cho pieces
+                max_size = 80  # Kích thước tối đa cho pieces
+                original_width, original_height = piece_image.size
+                ratio = min(max_size / original_width, max_size / original_height)
+                new_width = int(original_width * ratio)
+                new_height = int(original_height * ratio)
+                piece_image = piece_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                
+                photo = ImageTk.PhotoImage(piece_image)
+                
+                self.piece_labels[i].configure(image=photo, text="")
+                self.piece_labels[i].image = photo  # Keep reference
+                
+            except Exception as e:
+                print(f"Loi khi hien thi piece {i+1}: {e}")
+                self.piece_labels[i].configure(text=f"Piece {i+1} Error")
+    
+    def create_board_image(self, board, name):
+        """Tạo ảnh board với màu sắc thống nhất"""
+        h, w = board.shape
+        cell_size = 80
+        
+        # Tạo ảnh
+        image = np.ones((h * cell_size, w * cell_size, 3), dtype=np.uint8) * 255
+        
+        # Vẽ board với màu sắc thống nhất
+        for row in range(h):
+            for col in range(w):
+                if board[row, col] == 0:
+                    color = (220, 220, 220)  # Xám nhạt - ô trống
+                else:
+                    color = (80, 80, 80)     # Xám đậm - ô có block
+                
+                y1 = row * cell_size
+                y2 = (row + 1) * cell_size
+                x1 = col * cell_size
+                x2 = (col + 1) * cell_size
+                
+                image[y1:y2, x1:x2] = color
+                
+                # Vẽ border
+                cv2.rectangle(image, (x1, y1), (x2-1, y2-1), (0, 0, 0), 1)
+        
+        # Convert to PIL Image
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image_rgb)
+        
+        return pil_image
+    
+    def create_piece_image(self, piece, cell_size=25):
+        """Tạo ảnh cho một piece với màu xám đậm cho block"""
+        h, w = piece.shape
+        
+        # Tạo ảnh nền trắng
+        image = np.ones((h * cell_size, w * cell_size, 3), dtype=np.uint8) * 255
+        
+        for row in range(h):
+            for col in range(w):
+                if piece[row, col] == 1:
+                    color = (80, 80, 80)      # Xám đậm cho block
+                else:
+                    color = (220, 220, 220)   # Xám nhạt cho empty parts
+                
+                y1 = row * cell_size
+                y2 = (row + 1) * cell_size
+                x1 = col * cell_size
+                x2 = (col + 1) * cell_size
+                
+                image[y1:y2, x1:x2] = color
+                
+                # Vẽ border
+                cv2.rectangle(image, (x1, y1), (x2-1, y2-1), (0, 0, 0), 1)
+        
+        return Image.fromarray(image)
+    
+    def create_solution_image(self, solution, name):
+        """Tạo ảnh solution"""
+        # Tạo board mẫu
+        board = self.create_sample_board()
+        
+        # Đặt piece
+        piece = solution['piece']
+        pos = solution['position']
+        
+        # Tạo board với suggestion
+        board_with_suggestion = board.copy()
+        
+        for r in range(piece.shape[0]):
+            for c in range(piece.shape[1]):
+                if piece[r, c] == 1:
+                    board_row = pos[0] + r
+                    board_col = pos[1] + c
+                    if board_row < 8 and board_col < 8:
+                        board_with_suggestion[board_row, board_col] = 9  # Suggestion color
+        
+        # Tạo ảnh
+        h, w = board_with_suggestion.shape
+        cell_size = 80
+        
+        image = np.ones((h * cell_size, w * cell_size, 3), dtype=np.uint8) * 255
+        
+        for row in range(h):
+            for col in range(w):
+                if board_with_suggestion[row, col] == 0:
+                    color = (220, 220, 220)  # Xám nhạt - ô trống
+                elif board_with_suggestion[row, col] == 9:
+                    color = (0, 150, 0)      # Xanh lá đậm - suggestion
+                else:
+                    color = (80, 80, 80)     # Xám đậm - ô có block
+                
+                y1 = row * cell_size
+                y2 = (row + 1) * cell_size
+                x1 = col * cell_size
+                x2 = (col + 1) * cell_size
+                
+                image[y1:y2, x1:x2] = color
+                
+                # Vẽ border
+                cv2.rectangle(image, (x1, y1), (x2-1, y2-1), (0, 0, 0), 1)
+        
+        # Convert to PIL Image
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image_rgb)
+        
+        return pil_image
+    
     
     def run(self):
         """Chạy GUI"""
