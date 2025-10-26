@@ -34,51 +34,36 @@ class BlockBlastVision:
         }
     
     def extract_board_from_image(self, image_path: str) -> np.ndarray:
-        """Trích xuất board từ ảnh"""
+        """Trích xuất board từ ảnh Block Blast"""
         try:
             # Đọc ảnh
             image = cv2.imread(image_path)
             if image is None:
                 raise ValueError(f"Không thể đọc ảnh: {image_path}")
             
-            # Tiền xử lý
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-            edges = cv2.Canny(blurred, 50, 150)
+            print(f"Ảnh gốc: {image.shape}")
             
-            # Tìm contour lớn nhất
-            contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if not contours:
-                raise ValueError("Không tìm thấy contour")
+            # Tìm board bằng cách tìm vùng có nhiều khối màu
+            board_region = self._find_board_region(image)
+            print(f"Board region: {board_region}")
             
-            # Lấy contour lớn nhất
-            largest_contour = max(contours, key=cv2.contourArea)
+            # Crop board region
+            x, y, w, h = board_region
+            board_image = image[y:y+h, x:x+w]
+            print(f"Board image: {board_image.shape}")
             
-            # Tìm 4 góc
-            epsilon = 0.02 * cv2.arcLength(largest_contour, True)
-            approx = cv2.approxPolyDP(largest_contour, epsilon, True)
+            # Resize về kích thước chuẩn (vuông)
+            size = min(board_image.shape[:2])
+            board_image = cv2.resize(board_image, (size, size))
+            print(f"Resized board: {board_image.shape}")
             
-            if len(approx) >= 4:
-                # Sắp xếp 4 góc
-                points = approx.reshape(-1, 2)
-                points = self._order_points(points)
-                
-                # Warp perspective
-                warped = self._four_point_transform(image, points)
-            else:
-                # Fallback: crop center
-                h, w = image.shape[:2]
-                center_crop_size = min(h, w) * 0.8
-                start_x = int((w - center_crop_size) / 2)
-                start_y = int((h - center_crop_size) / 2)
-                warped = image[start_y:start_y+int(center_crop_size), 
-                              start_x:start_x+int(center_crop_size)]
+            # Chia grid và phân tích
+            board = self._extract_grid_cells_improved(board_image)
+            print(f"Extracted board shape: {board.shape}")
+            print(f"Board có {np.sum(board != 0)} blocks")
             
-            # Resize về kích thước chuẩn
-            warped = cv2.resize(warped, (500, 500))
-            
-            # Chia grid
-            board = self._extract_grid_cells(warped)
+            # Debug: hiển thị board
+            self._debug_board(board)
             
             return board
             
@@ -86,6 +71,261 @@ class BlockBlastVision:
             print(f"Lỗi khi xử lý ảnh: {e}")
             # Fallback: tạo board mẫu
             return self._create_fallback_board()
+    
+    def _find_board_region(self, image):
+        """Tìm vùng board trong ảnh Block Blast - phiên bản cải tiến"""
+        h, w = image.shape[:2]
+        
+        print(f"Image size: {w}x{h}")
+        
+        # Tìm vùng board bằng cách tìm pattern vuông
+        # Chuyển sang grayscale để tìm edges
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Tìm edges
+        edges = cv2.Canny(gray, 50, 150)
+        
+        # Tìm contours
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Tìm contour có diện tích lớn nhất và có dạng gần vuông
+        best_contour = None
+        best_score = 0
+        
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < 10000:  # Quá nhỏ
+                continue
+                
+            # Tính bounding rect
+            x, y, w_rect, h_rect = cv2.boundingRect(contour)
+            
+            # Kiểm tra tỷ lệ (gần vuông)
+            aspect_ratio = w_rect / h_rect
+            if 0.7 <= aspect_ratio <= 1.3:  # Gần vuông
+                # Tính score dựa trên diện tích và tỷ lệ
+                score = area * (1 - abs(1 - aspect_ratio))
+                if score > best_score:
+                    best_score = score
+                    best_contour = contour
+        
+        if best_contour is not None:
+            x, y, w_rect, h_rect = cv2.boundingRect(best_contour)
+            print(f"Found board region: x={x}, y={y}, w={w_rect}, h={h_rect}")
+            return (x, y, w_rect, h_rect)
+        else:
+            # Fallback: tìm vùng có nhiều màu sắc
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            
+            # Tìm vùng có nhiều màu sắc (không phải nền)
+            lower_bright = np.array([0, 30, 50])
+            upper_bright = np.array([180, 255, 255])
+            mask = cv2.inRange(hsv, lower_bright, upper_bright)
+            
+            # Tìm contours
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            if contours:
+                largest_contour = max(contours, key=cv2.contourArea)
+                x, y, w_rect, h_rect = cv2.boundingRect(largest_contour)
+                
+                # Mở rộng để bao gồm toàn bộ board
+                margin = 50
+                x = max(0, x - margin)
+                y = max(0, y - margin)
+                w_rect = min(w_rect + 2*margin, image.shape[1] - x)
+                h_rect = min(h_rect + 2*margin, image.shape[0] - y)
+                
+                print(f"Found board region (fallback): x={x}, y={y}, w={w_rect}, h={h_rect}")
+                return (x, y, w_rect, h_rect)
+            else:
+                # Fallback cuối cùng: lấy vùng trung tâm
+                center_x, center_y = w // 2, h // 2
+                board_size = min(w, h) // 2
+                x = center_x - board_size // 2
+                y = center_y - board_size // 2
+                print(f"Fallback board region: x={x}, y={y}, w={board_size}, h={board_size}")
+                return (x, y, board_size, board_size)
+    
+    def _extract_grid_cells_improved(self, image):
+        """Chia ảnh thành grid cells và phân tích màu - phiên bản cải tiến"""
+        h, w = image.shape[:2]
+        cell_size = min(h, w) // self.grid_size
+        
+        print(f"Cell size: {cell_size}")
+        
+        # Tính margin để crop center của mỗi cell
+        margin = int(cell_size * 0.1)  # 10% margin
+        
+        board = np.zeros((self.grid_size, self.grid_size), dtype=int)
+        
+        for row in range(self.grid_size):
+            for col in range(self.grid_size):
+                # Tính tọa độ cell
+                y1 = row * cell_size + margin
+                y2 = (row + 1) * cell_size - margin
+                x1 = col * cell_size + margin
+                x2 = (col + 1) * cell_size - margin
+                
+                # Đảm bảo không vượt quá kích thước ảnh
+                y1 = max(0, y1)
+                y2 = min(h, y2)
+                x1 = max(0, x1)
+                x2 = min(w, x2)
+                
+                # Crop cell
+                cell = image[y1:y2, x1:x2]
+                
+                if cell.size == 0:
+                    continue
+                
+                # Phân tích màu
+                color_code = self._analyze_cell_color_improved(cell)
+                board[row, col] = color_code
+        
+        return board
+    
+    def _analyze_cell_color_improved(self, cell):
+        """Phân tích màu của cell - phiên bản cải tiến cho Block Blast"""
+        if cell.size == 0:
+            return 0
+        
+        # Chuyển sang HSV
+        hsv = cv2.cvtColor(cell, cv2.COLOR_BGR2HSV)
+        
+        # Tính mean HSV
+        mean_hsv = np.mean(hsv, axis=(0, 1))
+        h, s, v = mean_hsv
+        
+        # Kiểm tra nếu cell trống - cải tiến ngưỡng
+        # Cell trống thường có V thấp hoặc S thấp
+        if v < 100 or s < 40:
+            return 0
+        
+        # Phân loại màu dựa trên H (Hue) - tối ưu cho Block Blast
+        if h < 10 or h > 170:  # Red range
+            return 1
+        elif 10 <= h < 25:  # Orange
+            return 2
+        elif 25 <= h < 45:  # Yellow
+            return 3
+        elif 45 <= h < 75:  # Green
+            return 4
+        elif 75 <= h < 105:  # Cyan
+            return 5
+        elif 105 <= h < 135:  # Blue
+            return 6
+        elif 135 <= h < 165:  # Purple
+            return 7
+        else:
+            return 8  # Other colors
+    
+    def _debug_board(self, board):
+        """Debug: hiển thị board để kiểm tra"""
+        print("\n=== DEBUG BOARD ===")
+        for row in range(board.shape[0]):
+            row_str = ""
+            for col in range(board.shape[1]):
+                if board[row, col] == 0:
+                    row_str += "."
+                else:
+                    row_str += str(board[row, col])
+            print(f"Row {row}: {row_str}")
+        
+        # Thống kê
+        total_cells = board.size
+        empty_cells = np.sum(board == 0)
+        occupied_cells = total_cells - empty_cells
+        print(f"Total cells: {total_cells}")
+        print(f"Empty cells: {empty_cells}")
+        print(f"Occupied cells: {occupied_cells}")
+        print(f"Fill ratio: {occupied_cells/total_cells*100:.1f}%")
+        print("==================\n")
+    
+    def test_with_sample_image(self):
+        """Test với ảnh mẫu để kiểm tra thuật toán"""
+        print("=== TESTING VISION ALGORITHM ===")
+        
+        # Tạo ảnh mẫu giống Block Blast
+        sample_image = self._create_sample_block_blast_image()
+        
+        # Test extract board
+        board = self._extract_grid_cells_improved(sample_image)
+        print(f"Sample board shape: {board.shape}")
+        print(f"Sample board có {np.sum(board != 0)} blocks")
+        
+        # Debug board
+        self._debug_board(board)
+        
+        return board
+    
+    def _create_sample_block_blast_image(self):
+        """Tạo ảnh mẫu giống Block Blast"""
+        # Tạo ảnh 400x400
+        image = np.ones((400, 400, 3), dtype=np.uint8) * 139  # Nền nâu
+        
+        # Vẽ board 8x8
+        cell_size = 40
+        board_size = 8 * cell_size
+        
+        # Vẽ border
+        cv2.rectangle(image, (50, 50), (50 + board_size, 50 + board_size), (0, 0, 0), 2)
+        
+        # Vẽ một số blocks mẫu
+        # Block vàng (hình L)
+        cv2.rectangle(image, (50 + 0*cell_size, 50 + 5*cell_size), (50 + 0*cell_size + cell_size, 50 + 6*cell_size), (0, 255, 255), -1)
+        cv2.rectangle(image, (50 + 0*cell_size, 50 + 6*cell_size), (50 + 2*cell_size, 50 + 7*cell_size), (0, 255, 255), -1)
+        
+        # Block xanh lá (hình vuông 2x2)
+        cv2.rectangle(image, (50 + 0*cell_size, 50 + 2*cell_size), (50 + 2*cell_size, 50 + 4*cell_size), (0, 255, 0), -1)
+        
+        # Block xanh dương (hình dài)
+        cv2.rectangle(image, (50 + 7*cell_size, 50 + 0*cell_size), (50 + 8*cell_size, 50 + 6*cell_size), (255, 0, 0), -1)
+        cv2.rectangle(image, (50 + 4*cell_size, 50 + 4*cell_size), (50 + 7*cell_size, 50 + 5*cell_size), (255, 0, 0), -1)
+        cv2.rectangle(image, (50 + 6*cell_size, 50 + 5*cell_size), (50 + 7*cell_size, 50 + 6*cell_size), (255, 0, 0), -1)
+        
+        return image
+    
+    def test_with_real_image(self, image_path):
+        """Test với ảnh thực tế để debug"""
+        print("=== TESTING WITH REAL IMAGE ===")
+        
+        try:
+            # Đọc ảnh
+            image = cv2.imread(image_path)
+            if image is None:
+                print(f"Không thể đọc ảnh: {image_path}")
+                return None
+            
+            print(f"Ảnh gốc: {image.shape}")
+            
+            # Tìm board region
+            board_region = self._find_board_region(image)
+            print(f"Board region: {board_region}")
+            
+            # Crop board region
+            x, y, w, h = board_region
+            board_image = image[y:y+h, x:x+w]
+            print(f"Board image: {board_image.shape}")
+            
+            # Resize về kích thước chuẩn (vuông)
+            size = min(board_image.shape[:2])
+            board_image = cv2.resize(board_image, (size, size))
+            print(f"Resized board: {board_image.shape}")
+            
+            # Chia grid và phân tích
+            board = self._extract_grid_cells_improved(board_image)
+            print(f"Extracted board shape: {board.shape}")
+            print(f"Board có {np.sum(board != 0)} blocks")
+            
+            # Debug: hiển thị board
+            self._debug_board(board)
+            
+            return board
+            
+        except Exception as e:
+            print(f"Lỗi khi test với ảnh thực tế: {e}")
+            return None
     
     def _order_points(self, pts):
         """Sắp xếp 4 điểm theo thứ tự: top-left, top-right, bottom-right, bottom-left"""
@@ -668,7 +908,7 @@ class BlockBlastGUI:
         
         # Current Board
         current_frame = tk.Frame(left_column, bg=self.colors['light'], 
-                                relief=tk.RAISED, bd=1)
+                              relief=tk.RAISED, bd=1)
         current_frame.pack(fill=tk.X, pady=(0, 5))
         
         current_inner = tk.Frame(current_frame, bg=self.colors['light'])
@@ -704,7 +944,7 @@ class BlockBlastGUI:
             piece_label = tk.Label(pieces_display_frame, text=f"Piece {i+1}", 
                                  font=("Arial", 10), 
                                  fg=self.colors['text_secondary'], 
-                                 bg=self.colors['light'], 
+                                        bg=self.colors['light'],
                                  width=12, height=4, relief=tk.SUNKEN, bd=1)
             piece_label.pack(side=tk.LEFT, padx=5, pady=5, expand=True, fill=tk.BOTH)
             self.piece_labels.append(piece_label)
@@ -733,7 +973,7 @@ class BlockBlastGUI:
         self.sol1_label = tk.Label(sol1_inner, text="No solution yet", 
                                   font=("Arial", 9), 
                                   fg=self.colors['text_secondary'], 
-                                  bg=self.colors['light'],
+                                  bg=self.colors['light'], 
                                   height=6, relief=tk.SUNKEN, bd=1)
         self.sol1_label.pack(fill=tk.BOTH, expand=True)
         
@@ -752,8 +992,8 @@ class BlockBlastGUI:
         
         self.sol2_label = tk.Label(sol2_inner, text="No solution yet", 
                                   font=("Arial", 9), 
-                                  fg=self.colors['text_secondary'], 
-                                  bg=self.colors['light'],
+                                   fg=self.colors['text_secondary'], 
+                                   bg=self.colors['light'],
                                   height=6, relief=tk.SUNKEN, bd=1)
         self.sol2_label.pack(fill=tk.BOTH, expand=True)
         
@@ -773,44 +1013,26 @@ class BlockBlastGUI:
         self.sol3_label = tk.Label(sol3_inner, text="No solution yet", 
                                   font=("Arial", 9), 
                                   fg=self.colors['text_secondary'], 
-                                  bg=self.colors['light'],
+                                 bg=self.colors['light'], 
                                   height=6, relief=tk.SUNKEN, bd=1)
         self.sol3_label.pack(fill=tk.BOTH, expand=True)
         
-        # Footer với buttons
+        # Footer với button SOLVER ở giữa
         footer_frame = tk.Frame(main_frame, bg=self.colors['background'])
         footer_frame.pack(fill=tk.X, pady=(20, 0))
         
-        # Button frame
+        # Button frame - căn giữa
         button_frame = tk.Frame(footer_frame, bg=self.colors['background'])
         button_frame.pack()
         
-        # SOLVER button - NÚT CHÍNH
+        # SOLVER button - NÚT CHÍNH ở giữa
         self.solver_btn = tk.Button(button_frame, text="🚀 SOLVER", 
-                                  font=("Arial", 14, "bold"),
-                                  bg=self.colors['success'], 
-                                  fg=self.colors['light'],
-                                  relief=tk.FLAT, bd=0, padx=25, pady=10,
-                                  command=self.solve)
-        self.solver_btn.pack(side=tk.LEFT, padx=(0, 15))
-        
-        # TEST button
-        test_btn = tk.Button(button_frame, text="🧪 TEST", 
-                            font=("Arial", 12),
-                            bg=self.colors['accent'], 
-                            fg=self.colors['light'],
-                            relief=tk.FLAT, bd=0, padx=20, pady=8,
-                            command=self.test_simple)
-        test_btn.pack(side=tk.LEFT, padx=(0, 15))
-        
-        # CLEAR button
-        clear_btn = tk.Button(button_frame, text="🗑️ CLEAR", 
-                             font=("Arial", 12),
-                             bg="#dc3545", 
+                             font=("Arial", 16, "bold"),
+                             bg=self.colors['success'], 
                              fg=self.colors['light'],
-                             relief=tk.FLAT, bd=0, padx=20, pady=8,
-                             command=self.clear_all)
-        clear_btn.pack(side=tk.LEFT)
+                             relief=tk.FLAT, bd=0, padx=40, pady=15,
+                             command=self.solve)
+        self.solver_btn.pack()
         
     def select_image(self):
         """Chọn ảnh từ file"""
@@ -824,41 +1046,6 @@ class BlockBlastGUI:
             self.image_path_var.set(file_path)
             print(f"Da chon anh: {os.path.basename(file_path)}")
     
-    def test_simple(self):
-        """Test đơn giản"""
-        print("=== TEST DON GIAN ===")
-        
-        # Tạo board mẫu
-        board = self.create_sample_board()
-        
-        # Hiển thị current board
-        self.display_current_board(board)
-        
-        # Hiển thị các piece ban đầu
-        self.display_initial_pieces()
-        
-        # Tạo 3 solutions mẫu
-        solutions = self.create_sample_solutions()
-        
-        # Hiển thị solutions
-        self.display_solutions(solutions)
-        
-        messagebox.showinfo("Test", "Test thành công!")
-    
-    def clear_all(self):
-        """Xóa tất cả"""
-        self.current_board_label.configure(text="No board yet")
-        self.sol1_label.configure(text="No solution yet")
-        self.sol2_label.configure(text="No solution yet")
-        self.sol3_label.configure(text="No solution yet")
-        
-        # Xóa piece labels
-        for label in self.piece_labels:
-            label.configure(image='', text='Piece')
-        
-        self.current_image_path = None
-        self.image_path_var.set("")
-        print("Da xoa tat ca")
         
     def select_image(self):
         """Chọn ảnh từ file"""
@@ -887,9 +1074,17 @@ class BlockBlastGUI:
             # Khởi tạo vision processor
             vision = BlockBlastVision(8)
             
-            # Trích xuất board từ ảnh
-            print("Đang xử lý ảnh...")
+            # Test với ảnh thực tế trước
+            print("Đang test với ảnh thực tế...")
+            test_board = vision.test_with_real_image(self.current_image_path)
+            
+            if test_board is not None:
+                self.current_board = test_board
+            else:
+                # Fallback: sử dụng method cũ
+                print("Sử dụng method cũ...")
             self.current_board = vision.extract_board_from_image(self.current_image_path)
+            
             print("Đã trích xuất board thành công")
             print(f"Board shape: {self.current_board.shape}")
             print(f"Board có {np.sum(self.current_board != 0)} block")
@@ -1183,7 +1378,7 @@ class BlockBlastGUI:
     
     def create_solution_image(self, solution, name):
         """Tạo ảnh solution"""
-        # Tạo board mẫu
+            # Tạo board mẫu
         board = self.create_sample_board()
         
         # Đặt piece
@@ -1200,8 +1395,8 @@ class BlockBlastGUI:
                     board_col = pos[1] + c
                     if board_row < 8 and board_col < 8:
                         board_with_suggestion[board_row, board_col] = 9  # Suggestion color
-        
-        # Tạo ảnh
+            
+            # Tạo ảnh
         h, w = board_with_suggestion.shape
         cell_size = 80
         
